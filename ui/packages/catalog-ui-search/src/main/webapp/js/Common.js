@@ -171,7 +171,11 @@ define([
            return moment(date).fromNow();
         },
         getImageSrc: function(img){
-            return img;
+            if (img === "" || img.substring(0, 4) === 'http' || img.substring(0, 1) === '/') {
+                return img;
+            } else {
+                return "data:image/png;base64," + img;
+            }
         },
         getResourceUrlFromThumbUrl: function(url){
             return url.replace(/=thumbnail[_=&\d\w\s;]+/, '=resource');

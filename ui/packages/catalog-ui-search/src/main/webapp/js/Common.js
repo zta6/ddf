@@ -203,7 +203,7 @@ define([
            return moment(date).fromNow();
         },
         getImageSrc: function(img){
-            if (img === "" || img.substring(0, 4) === 'http') {
+            if (img === "" || img.substring(0, 4) === 'http' || img.substring(0, 1) === '/') {
                 return img;
             } else {
                 return "data:image/png;base64," + img;

@@ -105,10 +105,10 @@ public class QueryApplication implements SparkApplication, Function {
 
           // Work-around for paths being behind VPCs with non-public DNS values - wlm
           String host =
-              org.codice.ddf.configuration.SystemBaseUrl.getProtocol()
-                  + org.codice.ddf.configuration.SystemBaseUrl.getHost()
+              org.codice.ddf.configuration.SystemBaseUrl.INTERNAL.getProtocol()
+                  + org.codice.ddf.configuration.SystemBaseUrl.INTERNAL.getHost()
                   + ":"
-                  + org.codice.ddf.configuration.SystemBaseUrl.getPort();
+                  + org.codice.ddf.configuration.SystemBaseUrl.INTERNAL.getPort();
           result = result.replaceAll(host, "");
 
           return result;

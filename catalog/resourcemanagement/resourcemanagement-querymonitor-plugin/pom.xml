@@ -17,7 +17,7 @@
     <parent>
         <groupId>org.codice.ddf.resourcemanagement</groupId>
         <artifactId>resourcemanagement</artifactId>
-        <version>2.13.154-SNAPSHOT</version>
+        <version>2.13.0.154</version>
     </parent>
     <artifactId>resourcemanagement-querymonitor-plugin</artifactId>
     <name>DDF :: Resource Management :: Query Monitor Plugin</name>

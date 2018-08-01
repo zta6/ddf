@@ -20,12 +20,15 @@
 <div class="source-actions">
     {{#each this.sourceActions}}
     <div class="source-action">
+         <a href="{{this.url}}" target="_blank">{{this.title}}</a>
+         <!--
          <button class="action-button is-button" title="{{this.title}}: {{this.description}}" data-title="{{this.title}}" data-url="{{this.url}}" data-help="{{this.title}}: {{this.description}}">
             <span class="fa fa-external-link"></span>
             <span>
                 {{this.title}}
             </span>
         </button>
+        -->
     </div>
     {{/each}}
 </div>

@@ -45,6 +45,7 @@ import java.nio.charset.Charset;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -67,6 +68,7 @@ import java.util.stream.Collectors;
 import javax.ws.rs.NotFoundException;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.input.BoundedInputStream;
+import org.apache.commons.lang.StringUtils;
 import org.boon.json.JsonFactory;
 import org.boon.json.JsonParserFactory;
 import org.boon.json.JsonSerializerFactory;
@@ -498,16 +500,15 @@ public class EndpointUtil {
   private Pattern boonDefault =
       Pattern.compile("[a-zA-Z]{3}\\s[a-zA-Z]{3}\\s\\d+\\s[0-9:]+\\s(\\w+\\s)?\\d+");
 
-  private Pattern iso8601 =
-      Pattern.compile("\\d+-?\\d+-?\\d+T\\d+:?\\d+:?\\d+(Z|([+\\-])\\d+:\\d+)");
+  private Pattern iso8601Z = Pattern.compile("\\d+-?\\d+-?\\d+T\\d+:?\\d+:?\\d+(\\.\\d+)?Z");
+
+  private Pattern iso8601Offset =
+      Pattern.compile("\\d+-?\\d+-?\\d+T\\d+:?\\d+:?\\d+(\\.\\d+)?[+\\-]\\d+:\\d+");
 
   public Serializable parseDate(Serializable value) {
-    if (value == null) {
-      return null;
-    }
 
     if (value instanceof Date) {
-      return ((Date) value).toInstant().toString();
+      return ((Date) value).toInstant();
     }
 
     if (value instanceof Long) {
@@ -520,18 +521,36 @@ public class EndpointUtil {
 
     String string = String.valueOf(value);
 
+    if (StringUtils.isBlank(string)) {
+      return null;
+    }
+
+    if (StringUtils.isNumeric(string)) {
+      try {
+        return Instant.ofEpochMilli(Long.parseLong(string));
+      } catch (NumberFormatException ex) {
+        throw new IllegalArgumentException(ex);
+      }
+    }
+
+    if (iso8601Z.matcher(string).matches()) {
+      return Instant.parse(string);
+    }
+
+    if (iso8601Offset.matcher(string).matches()) {
+      return OffsetDateTime.parse(string).toInstant();
+    }
+
     SimpleDateFormat dateFormat;
     if (boonDefault.matcher(string).matches()) {
       dateFormat = new SimpleDateFormat("EEE MMM d HH:mm:ss zzz yyyy");
-    } else if (iso8601.matcher(string).matches()) {
-      dateFormat = new SimpleDateFormat(ISO_8601_DATE_FORMAT);
     } else {
       dateFormat = new SimpleDateFormat();
     }
     dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
 
     try {
-      return dateFormat.parse(value.toString());
+      return dateFormat.parse(value.toString()).toInstant();
     } catch (ParseException e) {
       throw new IllegalArgumentException(e);
     }

@@ -53,7 +53,9 @@ module.exports = Marionette.LayoutView.extend({
             this.ingestEditor.show(new IngestEditor());
         }
         this.ingestDetails.show(new IngestDetails({
-            url: '/services/catalog/',
+            url: this.options.url || '/services/catalog/',
+            extraHeaders: this.options.extraHeaders,
+            handleUploadSuccess: this.options.handleUploadSuccess,
             preIngestValidator: isEditorShown ? this.validateAttributes.bind(this) : null
         }));
     },

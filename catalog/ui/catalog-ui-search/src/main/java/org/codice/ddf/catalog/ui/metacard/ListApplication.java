@@ -289,10 +289,10 @@ public class ListApplication implements SparkApplication {
       createResponse.getCreatedMetacards().stream().map(Metacard::getId).forEach(idConsumer);
 
     } catch (IngestException e) {
-      String errorMessage = "Error while storing entry in catalog.";
-      LOGGER.info(errorMessage, e);
-      INGEST_LOGGER.warn(errorMessage, e);
-      errorMessageConsumer.accept(errorMessage);
+      String exceptionMessage = "Error while storing entry in catalog.";
+      LOGGER.info(exceptionMessage, e);
+      INGEST_LOGGER.warn(exceptionMessage, e);
+      throw new InternalServerErrorException(exceptionMessage);
     } catch (SourceUnavailableException e) {
       String exceptionMessage = "Cannot create catalog entry because source is unavailable.";
       LOGGER.info(exceptionMessage, e);

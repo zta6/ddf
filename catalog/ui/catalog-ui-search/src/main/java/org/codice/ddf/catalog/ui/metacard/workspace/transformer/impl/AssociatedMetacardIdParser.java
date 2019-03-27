@@ -19,15 +19,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import org.codice.ddf.catalog.ui.metacard.workspace.WorkspaceConstants;
 import org.codice.ddf.catalog.ui.metacard.workspace.transformer.WorkspaceTransformer;
 import org.codice.ddf.catalog.ui.metacard.workspace.transformer.WorkspaceValueTransformation;
 
-public class QueryIdsParser extends WorkspaceValueTransformation<List, List> {
+public class AssociatedMetacardIdParser extends WorkspaceValueTransformation<List, List> {
+
+  private final String KEY;
+
+  public AssociatedMetacardIdParser(String key) {
+    this.KEY = key;
+  }
 
   @Override
   public String getKey() {
-    return WorkspaceConstants.WORKSPACE_QUERIES;
+    return KEY;
   }
 
   @Override
@@ -48,7 +53,7 @@ public class QueryIdsParser extends WorkspaceValueTransformation<List, List> {
             .stream()
             .filter(String.class::isInstance)
             .map(String.class::cast)
-            .map(queryId -> ImmutableMap.of("id", queryId))
+            .map(id -> ImmutableMap.of("id", id))
             .collect(Collectors.toList()));
   }
 
@@ -59,7 +64,7 @@ public class QueryIdsParser extends WorkspaceValueTransformation<List, List> {
             .stream()
             .filter(Map.class::isInstance)
             .map(Map.class::cast)
-            .map(queryId -> queryId.getOrDefault("id", ""))
+            .map(id -> id.getOrDefault("id", ""))
             .collect(Collectors.toList()));
   }
 }

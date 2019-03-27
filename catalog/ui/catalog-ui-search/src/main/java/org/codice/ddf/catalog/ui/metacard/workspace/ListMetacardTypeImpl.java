@@ -21,6 +21,7 @@ import ddf.catalog.data.impl.MetacardTypeImpl;
 import ddf.catalog.data.types.Core;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class ListMetacardTypeImpl extends MetacardTypeImpl {
 
@@ -35,6 +36,8 @@ public class ListMetacardTypeImpl extends MetacardTypeImpl {
   public static final String LIST_BOOKMARKS = "list.bookmarks";
 
   private static final Set<AttributeDescriptor> LIST_DESCRIPTORS;
+
+  public static final Set<String> LIST_ATTRIBUTE_NAMES;
 
   static {
     LIST_DESCRIPTORS = new HashSet<>();
@@ -69,6 +72,9 @@ public class ListMetacardTypeImpl extends MetacardTypeImpl {
             false /* tokenized */,
             true /* multivalued */,
             BasicTypes.STRING_TYPE));
+
+    LIST_ATTRIBUTE_NAMES =
+        LIST_DESCRIPTORS.stream().map(AttributeDescriptor::getName).collect(Collectors.toSet());
   }
 
   public ListMetacardTypeImpl() {

@@ -40,9 +40,8 @@ import ddf.catalog.filter.impl.SortByImpl;
 import ddf.catalog.impl.filter.GeoToolsFunctionFactory;
 import ddf.catalog.operation.QueryRequest;
 import ddf.catalog.operation.QueryResponse;
-import ddf.catalog.operation.impl.QueryImpl;
-import ddf.catalog.operation.impl.QueryRequestImpl;
-import ddf.catalog.operation.impl.QueryResponseImpl;
+import ddf.catalog.operation.impl.*;
+import ddf.catalog.source.IngestException;
 import ddf.catalog.source.SourceUnavailableException;
 import ddf.catalog.source.UnsupportedQueryException;
 import ddf.catalog.util.impl.QueryFunction;
@@ -861,6 +860,20 @@ public class EndpointUtil {
         | FederationException e) {
       return null;
     }
+  }
+
+  public Metacard updateMetacard(String id, Metacard metacard)
+      throws SourceUnavailableException, IngestException {
+    return catalogFramework
+        .update(new UpdateRequestImpl(id, metacard))
+        .getUpdatedMetacards()
+        .get(0)
+        .getNewMetacard();
+  }
+
+  public Metacard saveMetacard(Metacard metacard)
+      throws IngestException, SourceUnavailableException {
+    return catalogFramework.create(new CreateRequestImpl(metacard)).getCreatedMetacards().get(0);
   }
 
   @SuppressWarnings("WeakerAccess" /* setter must be public for blueprint access */)

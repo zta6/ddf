@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.apache.commons.lang3.tuple.Pair;
+import org.codice.ddf.catalog.ui.metacard.workspace.ListMetacardImpl;
 import org.codice.ddf.catalog.ui.metacard.workspace.QueryMetacardImpl;
 import org.codice.ddf.catalog.ui.metacard.workspace.WorkspaceMetacardImpl;
 
@@ -36,6 +37,14 @@ public interface WorkspaceService {
    * @return list of query metacards
    */
   List<QueryMetacardImpl> getQueryMetacards(WorkspaceMetacardImpl workspaceMetacard);
+
+  /**
+   * Get a list of list metacards for a workspace metacard.
+   *
+   * @param workspaceMetacard must be non-null
+   * @return list of list metacards
+   */
+  List<ListMetacardImpl> getListMetacards(WorkspaceMetacardImpl workspaceMetacard);
 
   /**
    * Get a list of workspace metacards for a set of workspace identifiers.
@@ -69,4 +78,12 @@ public interface WorkspaceService {
    * @return workspace metacard
    */
   WorkspaceMetacardImpl getWorkspaceFromQueryId(String queryId);
+
+  /**
+   * Get a workspace metacard that has a list with a specified id
+   *
+   * @param listId must be non-null
+   * @return workspace metacard
+   */
+  WorkspaceMetacardImpl getWorkspaceFromListId(String listId);
 }

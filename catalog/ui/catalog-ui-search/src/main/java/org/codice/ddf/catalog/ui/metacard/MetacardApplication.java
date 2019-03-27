@@ -133,10 +133,12 @@ import org.codice.ddf.catalog.ui.metacard.notes.NoteMetacard;
 import org.codice.ddf.catalog.ui.metacard.notes.NoteUtil;
 import org.codice.ddf.catalog.ui.metacard.transform.CsvTransform;
 import org.codice.ddf.catalog.ui.metacard.validation.Validator;
+import org.codice.ddf.catalog.ui.metacard.workspace.ListMetacardImpl;
 import org.codice.ddf.catalog.ui.metacard.workspace.QueryMetacardImpl;
 import org.codice.ddf.catalog.ui.metacard.workspace.WorkspaceConstants;
 import org.codice.ddf.catalog.ui.metacard.workspace.WorkspaceMetacardImpl;
 import org.codice.ddf.catalog.ui.metacard.workspace.transformer.WorkspaceTransformer;
+import org.codice.ddf.catalog.ui.metacard.workspace.transformer.impl.AssociatedListMetacardsHandler;
 import org.codice.ddf.catalog.ui.metacard.workspace.transformer.impl.AssociatedQueryMetacardsHandler;
 import org.codice.ddf.catalog.ui.query.monitor.api.WorkspaceService;
 import org.codice.ddf.catalog.ui.security.AccessControlSecurityConfiguration;
@@ -212,6 +214,8 @@ public class MetacardApplication implements SparkApplication {
 
   private final AssociatedQueryMetacardsHandler queryMetacardsHandler;
 
+  private final AssociatedListMetacardsHandler listMetacardsHandler;
+
   public MetacardApplication(
       CatalogFramework catalogFramework,
       FilterBuilder filterBuilder,
@@ -229,7 +233,8 @@ public class MetacardApplication implements SparkApplication {
       SubjectIdentity subjectIdentity,
       AccessControlSecurityConfiguration accessControlSecurityConfiguration,
       WorkspaceService workspaceService,
-      AssociatedQueryMetacardsHandler queryMetacardsHandler) {
+      AssociatedQueryMetacardsHandler queryMetacardsHandler,
+      AssociatedListMetacardsHandler listMetacardsHandler) {
     this.catalogFramework = catalogFramework;
     this.filterBuilder = filterBuilder;
     this.util = endpointUtil;
@@ -247,6 +252,7 @@ public class MetacardApplication implements SparkApplication {
     this.accessControlSecurityConfiguration = accessControlSecurityConfiguration;
     this.workspaceService = workspaceService;
     this.queryMetacardsHandler = queryMetacardsHandler;
+    this.listMetacardsHandler = listMetacardsHandler;
   }
 
   private String getSubjectEmail() {
@@ -580,9 +586,18 @@ public class MetacardApplication implements SparkApplication {
                   .map(transformer::transform)
                   .collect(Collectors.toList());
 
-          queryMetacardsHandler.create(Collections.emptyList(), queries);
+          List<Metacard> lists =
+              ((List<Map<String, Object>>)
+                      incoming.getOrDefault(
+                          WorkspaceConstants.WORKSPACE_LISTS, Collections.emptyList()))
+                  .stream()
+                  .map(transformer::transform)
+                  .collect(Collectors.toList());
 
-          Metacard saved = saveMetacard(transformer.transform(incoming));
+          queryMetacardsHandler.create(Collections.emptyList(), queries);
+          listMetacardsHandler.create(Collections.emptyList(), lists);
+
+          Metacard saved = util.saveMetacard(transformer.transform(incoming));
           Map<String, Object> response = transformer.transform(saved);
 
           res.status(201);
@@ -597,13 +612,23 @@ public class MetacardApplication implements SparkApplication {
 
           WorkspaceMetacardImpl existingWorkspace = workspaceService.getWorkspaceMetacard(id);
           List<String> existingQueryIds = existingWorkspace.getQueries();
+          List<String> existingListIds = existingWorkspace.getContent();
 
           Map<String, Object> updatedWorkspace =
               GSON.fromJson(util.safeGetBody(req), MAP_STRING_TO_OBJECT_TYPE);
 
           List<Metacard> updatedQueryMetacards =
               ((List<Map<String, Object>>)
-                      updatedWorkspace.getOrDefault("queries", Collections.emptyList()))
+                      updatedWorkspace.getOrDefault(
+                          WorkspaceConstants.WORKSPACE_QUERIES, Collections.emptyList()))
+                  .stream()
+                  .map(transformer::transform)
+                  .collect(Collectors.toList());
+
+          List<Metacard> updatedListMetacards =
+              ((List<Map<String, Object>>)
+                      updatedWorkspace.getOrDefault(
+                          WorkspaceConstants.WORKSPACE_LISTS, Collections.emptyList()))
                   .stream()
                   .map(transformer::transform)
                   .collect(Collectors.toList());
@@ -611,13 +636,23 @@ public class MetacardApplication implements SparkApplication {
           List<String> updatedQueryIds =
               updatedQueryMetacards.stream().map(Metacard::getId).collect(Collectors.toList());
 
+          List<String> updatedListIds =
+              updatedListMetacards.stream().map(Metacard::getId).collect(Collectors.toList());
+
           List<QueryMetacardImpl> existingQueryMetacards =
               workspaceService.getQueryMetacards(existingWorkspace);
+
+          List<ListMetacardImpl> existingListMetacards =
+              workspaceService.getListMetacards(existingWorkspace);
 
           queryMetacardsHandler.create(existingQueryIds, updatedQueryMetacards);
           queryMetacardsHandler.delete(existingQueryIds, updatedQueryIds);
           queryMetacardsHandler.update(
               existingQueryIds, existingQueryMetacards, updatedQueryMetacards);
+
+          listMetacardsHandler.create(existingListIds, updatedListMetacards);
+          listMetacardsHandler.delete(existingListIds, updatedListIds);
+          listMetacardsHandler.update(existingListIds, existingListMetacards, updatedListMetacards);
 
           List<Map<String, String>> queryIdModel =
               updatedQueryIds
@@ -625,10 +660,17 @@ public class MetacardApplication implements SparkApplication {
                   .map(queryId -> ImmutableMap.of("id", queryId))
                   .collect(Collectors.toList());
 
+          List<Map<String, String>> listIdModel =
+              updatedListIds
+                  .stream()
+                  .map(listId -> ImmutableMap.of("id", listId))
+                  .collect(Collectors.toList());
+
           updatedWorkspace.put("queries", queryIdModel);
+          updatedWorkspace.put("lists", listIdModel);
           Metacard metacard = transformer.transform(updatedWorkspace);
           metacard.setAttribute(new AttributeImpl(Core.ID, id));
-          Metacard updated = updateMetacard(id, metacard);
+          Metacard updated = util.updateMetacard(id, metacard);
 
           return transformer.transform(updated);
         },
@@ -642,9 +684,14 @@ public class MetacardApplication implements SparkApplication {
           WorkspaceMetacardImpl workspace = workspaceService.getWorkspaceMetacard(id);
 
           String[] queryIds = workspace.getQueries().toArray(new String[0]);
+          String[] listIds = workspace.getContent().toArray(new String[0]);
 
           if (queryIds.length > 0) {
             catalogFramework.delete(new DeleteRequestImpl(queryIds));
+          }
+
+          if (listIds.length > 0) {
+            catalogFramework.delete(new DeleteRequestImpl(listIds));
           }
 
           catalogFramework.delete(new DeleteRequestImpl(id));
@@ -679,7 +726,7 @@ public class MetacardApplication implements SparkApplication {
               GSON.fromJson(util.safeGetBody(req), MAP_STRING_TO_OBJECT_TYPE);
 
           Metacard query = new QueryMetacardImpl(transformer.transform(body));
-          Metacard stored = saveMetacard(query);
+          Metacard stored = util.saveMetacard(query);
 
           res.status(201);
           return transformer.transform(stored);
@@ -694,7 +741,7 @@ public class MetacardApplication implements SparkApplication {
               GSON.fromJson(util.safeGetBody(req), MAP_STRING_TO_OBJECT_TYPE);
 
           Metacard query = new QueryMetacardImpl(transformer.transform(body));
-          Metacard updated = updateMetacard(queryId, query);
+          Metacard updated = util.updateMetacard(queryId, query);
 
           return transformer.transform(updated);
         },
@@ -725,7 +772,7 @@ public class MetacardApplication implements SparkApplication {
 
           WorkspaceMetacardImpl workspace = workspaceService.getWorkspaceFromQueryId(queryId);
           workspace.removeQueryAssociation(queryId);
-          saveMetacard(workspace);
+          util.saveMetacard(workspace);
 
           catalogFramework.delete(new DeleteRequestImpl(queryId));
           return ImmutableMap.of("message", "Successfully deleted.");
@@ -850,7 +897,7 @@ public class MetacardApplication implements SparkApplication {
 
           util.copyAttributes(workspaceMetacard, SECURITY_ATTRIBUTES, noteMetacard);
 
-          Metacard note = saveMetacard(noteMetacard);
+          Metacard note = util.saveMetacard(noteMetacard);
 
           SecurityLogger.auditWarn(
               "Attaching an annotation to a resource: resource={} annotation={}",
@@ -912,7 +959,7 @@ public class MetacardApplication implements SparkApplication {
                 ERROR_RESPONSE_TYPE, "Owner of note metacard is invalid!");
           }
           metacard.setAttribute(new AttributeImpl(NoteConstants.COMMENT, note));
-          metacard = updateMetacard(metacard.getId(), metacard);
+          metacard = util.updateMetacard(metacard.getId(), metacard);
           Map<String, String> responseNote = noteUtil.getResponseNote(metacard);
           return util.getResponseWrapper(SUCCESS_RESPONSE_TYPE, util.getJson(responseNote));
         });
@@ -1241,20 +1288,6 @@ public class MetacardApplication implements SparkApplication {
                     TimeUnit.SECONDS.toMillis(10)),
                 false));
     return Lists.newArrayList(resultIterable);
-  }
-
-  private Metacard updateMetacard(String id, Metacard metacard)
-      throws SourceUnavailableException, IngestException {
-    return catalogFramework
-        .update(new UpdateRequestImpl(id, metacard))
-        .getUpdatedMetacards()
-        .get(0)
-        .getNewMetacard();
-  }
-
-  private Metacard saveMetacard(Metacard metacard)
-      throws IngestException, SourceUnavailableException {
-    return catalogFramework.create(new CreateRequestImpl(metacard)).getCreatedMetacards().get(0);
   }
 
   private static class ByteSourceWrapper extends ByteSource {

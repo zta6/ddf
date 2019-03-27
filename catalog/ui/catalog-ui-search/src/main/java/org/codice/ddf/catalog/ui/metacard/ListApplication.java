@@ -13,27 +13,35 @@
  */
 package org.codice.ddf.catalog.ui.metacard;
 
+import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
+import static org.codice.ddf.catalog.ui.metacard.workspace.ListMetacardTypeImpl.LIST_TAG;
+import static org.codice.gsonsupport.GsonTypeAdapters.MAP_STRING_TO_OBJECT_TYPE;
+import static spark.Spark.delete;
+import static spark.Spark.get;
 import static spark.Spark.post;
+import static spark.Spark.put;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import ddf.catalog.CatalogFramework;
 import ddf.catalog.Constants;
 import ddf.catalog.content.data.impl.ContentItemImpl;
 import ddf.catalog.content.operation.CreateStorageRequest;
 import ddf.catalog.content.operation.impl.CreateStorageRequestImpl;
 import ddf.catalog.data.Metacard;
+import ddf.catalog.data.Result;
 import ddf.catalog.operation.CreateResponse;
+import ddf.catalog.operation.impl.DeleteRequestImpl;
 import ddf.catalog.source.IngestException;
 import ddf.catalog.source.SourceUnavailableException;
 import ddf.mime.MimeTypeMapper;
 import ddf.mime.MimeTypeResolutionException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.activation.MimeType;
 import javax.activation.MimeTypeParseException;
@@ -48,13 +56,19 @@ import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.codice.ddf.attachment.AttachmentInfo;
 import org.codice.ddf.catalog.ui.metacard.impl.StorableResourceImpl;
+import org.codice.ddf.catalog.ui.metacard.workspace.ListMetacardImpl;
+import org.codice.ddf.catalog.ui.metacard.workspace.WorkspaceMetacardImpl;
+import org.codice.ddf.catalog.ui.metacard.workspace.transformer.WorkspaceTransformer;
+import org.codice.ddf.catalog.ui.query.monitor.api.WorkspaceService;
 import org.codice.ddf.catalog.ui.splitter.Splitter;
 import org.codice.ddf.catalog.ui.splitter.SplitterLocator;
 import org.codice.ddf.catalog.ui.splitter.StopSplitterExecutionException;
 import org.codice.ddf.catalog.ui.splitter.StorableResource;
+import org.codice.ddf.catalog.ui.util.EndpointUtil;
 import org.codice.ddf.platform.util.TemporaryFileBackedOutputStream;
 import org.codice.ddf.platform.util.uuidgenerator.UuidGenerator;
 import org.codice.ddf.rest.service.CatalogService;
+import org.codice.gsonsupport.GsonTypeAdapters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Response;
@@ -68,9 +82,23 @@ public class ListApplication implements SparkApplication {
 
   private static final String LIST_TYPE_HEADER = "List-Type";
 
+  private static final Gson GSON =
+      new GsonBuilder()
+          .disableHtmlEscaping()
+          .serializeNulls()
+          .registerTypeAdapterFactory(GsonTypeAdapters.LongDoubleTypeAdapter.FACTORY)
+          .registerTypeAdapter(Date.class, new GsonTypeAdapters.DateLongFormatTypeAdapter())
+          .create();
+
   private final MimeTypeMapper mimeTypeMapper;
 
   private final CatalogFramework catalogFramework;
+
+  private final WorkspaceService workspaceService;
+
+  private final EndpointUtil endpointUtil;
+
+  private final WorkspaceTransformer transformer;
 
   private final UuidGenerator uuidGenerator;
 
@@ -83,11 +111,17 @@ public class ListApplication implements SparkApplication {
       CatalogFramework catalogFramework,
       UuidGenerator uuidGenerator,
       SplitterLocator splitterLocator,
+      WorkspaceService workspaceService,
+      EndpointUtil endpointUtil,
+      WorkspaceTransformer workspaceTransformer,
       CatalogService catalogService) {
     this.mimeTypeMapper = mimeTypeMapper;
     this.catalogFramework = catalogFramework;
     this.uuidGenerator = uuidGenerator;
     this.splitterLocator = splitterLocator;
+    this.workspaceService = workspaceService;
+    this.endpointUtil = endpointUtil;
+    this.transformer = workspaceTransformer;
     this.catalogService = catalogService;
   }
 
@@ -143,6 +177,85 @@ public class ListApplication implements SparkApplication {
 
           return "";
         });
+
+    get(
+        "/workspaces/:id/lists",
+        (req, res) -> {
+          String workspaceId = req.params(":id");
+          WorkspaceMetacardImpl workspace = workspaceService.getWorkspaceMetacard(workspaceId);
+
+          List<String> listIds = workspace.getContent();
+
+          return endpointUtil
+              .getMetacardsWithTagById(listIds, LIST_TAG)
+              .values()
+              .stream()
+              .map(Result::getMetacard)
+              .map(transformer::transform)
+              .collect(Collectors.toList());
+        },
+        endpointUtil::getJson);
+
+    post(
+        "/lists",
+        APPLICATION_JSON,
+        (req, res) -> {
+          Map<String, Object> body =
+              GSON.fromJson(endpointUtil.safeGetBody(req), MAP_STRING_TO_OBJECT_TYPE);
+
+          Metacard list = new ListMetacardImpl(transformer.transform(body));
+          Metacard stored = endpointUtil.saveMetacard(list);
+
+          res.status(201);
+          return transformer.transform(stored);
+        },
+        endpointUtil::getJson);
+
+    put(
+        "/lists/:id",
+        (req, res) -> {
+          String listId = req.params("id");
+          Map<String, Object> body =
+              GSON.fromJson(endpointUtil.safeGetBody(req), MAP_STRING_TO_OBJECT_TYPE);
+
+          Metacard list = new ListMetacardImpl(transformer.transform(body));
+          Metacard updated = endpointUtil.updateMetacard(listId, list);
+
+          return transformer.transform(updated);
+        },
+        endpointUtil::getJson);
+
+    get(
+        "/lists/:id",
+        (req, res) -> {
+          String id = req.params("id");
+          Metacard metacard = endpointUtil.getMetacardById(id);
+
+          Set<String> metacardTags = metacard.getTags();
+
+          if (metacardTags == null || !metacardTags.contains(LIST_TAG)) {
+            res.status(400);
+            return ImmutableMap.of("message", "Requested ID is not a list metacard.");
+          } else {
+            return transformer.transform(metacard);
+          }
+        },
+        endpointUtil::getJson);
+
+    delete(
+        "/lists/:id",
+        APPLICATION_JSON,
+        (req, res) -> {
+          String listId = req.params(":id");
+
+          WorkspaceMetacardImpl workspace = workspaceService.getWorkspaceFromListId(listId);
+          workspace.removeQueryAssociation(listId);
+          endpointUtil.saveMetacard(workspace);
+
+          catalogFramework.delete(new DeleteRequestImpl(listId));
+          return ImmutableMap.of("message", "Successfully deleted.");
+        },
+        endpointUtil::getJson);
   }
 
   private boolean attemptToSplitAndStore(

@@ -15,11 +15,10 @@ package org.codice.ddf.catalog.ui.metacard.workspace.transformer.impl;
 
 import static java.util.stream.Collectors.toList;
 
-import com.google.common.annotations.VisibleForTesting;
+import com.google.api.client.repackaged.com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import ddf.action.ActionRegistry;
 import ddf.catalog.data.Metacard;
-import ddf.catalog.data.MetacardType;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -28,10 +27,10 @@ import java.util.Optional;
 import java.util.Set;
 import org.codice.ddf.catalog.ui.metacard.workspace.ListMetacardImpl;
 import org.codice.ddf.catalog.ui.metacard.workspace.WorkspaceConstants;
-import org.codice.ddf.catalog.ui.metacard.workspace.transformer.EmbeddedMetacardsHandler;
 import org.codice.ddf.catalog.ui.metacard.workspace.transformer.WorkspaceTransformer;
 
-public class EmbeddedListMetacardsHandler extends EmbeddedMetacardsHandler {
+public class ListIdsParser extends AssociatedMetacardIdParser {
+
   @VisibleForTesting static final String LIST_ACTION_PREFIX = "catalog.data.metacard.list";
 
   @VisibleForTesting static final String ACTIONS_KEY = "actions";
@@ -40,17 +39,17 @@ public class EmbeddedListMetacardsHandler extends EmbeddedMetacardsHandler {
 
   private final ActionRegistry actionRegistry;
 
-  public EmbeddedListMetacardsHandler(ActionRegistry actionRegistry) {
+  public ListIdsParser(ActionRegistry actionRegistry) {
+    super(WorkspaceConstants.WORKSPACE_LISTS);
     this.actionRegistry = actionRegistry;
   }
 
-  /** {@inheritDoc} Add "actions" key to list metacards. */
   @Override
   public Optional<List> metacardValueToJsonValue(
-      WorkspaceTransformer transformer, List metacardXMLStrings, Metacard workspaceMetacard) {
+      WorkspaceTransformer transformer, List metacardValue, Metacard workspaceMetacard) {
 
     final Optional<List> listMetacardsOptional =
-        super.metacardValueToJsonValue(transformer, metacardXMLStrings, workspaceMetacard);
+        super.metacardValueToJsonValue(transformer, metacardValue, workspaceMetacard);
 
     listMetacardsOptional.ifPresent(
         listMetacards ->
@@ -66,26 +65,23 @@ public class EmbeddedListMetacardsHandler extends EmbeddedMetacardsHandler {
     return listMetacardsOptional;
   }
 
+  @Override
+  public Optional<List> jsonValueToMetacardValue(WorkspaceTransformer transformer, List jsonValue) {
+    ((List<Object>) jsonValue)
+        .stream()
+        .filter(Map.class::isInstance)
+        .map(Map.class::cast)
+        .forEach(this::removeExternalListAttributes);
+
+    return super.jsonValueToMetacardValue(transformer, jsonValue);
+  }
+
   private void addListActionsToListMetacard(
       Map listMetacardAsMap, Metacard workspaceMetacard, WorkspaceTransformer transformer) {
     final Metacard listMetacard = new ListMetacardImpl();
     transformer.transformIntoMetacard(listMetacardAsMap, listMetacard);
     final List<Map<String, Object>> listActions = getListActions(workspaceMetacard, listMetacard);
     listMetacardAsMap.put(ACTIONS_KEY, listActions);
-  }
-
-  /** {@inheritDoc} Remove "actions" key from list metacard map. */
-  @Override
-  public Optional<List> jsonValueToMetacardValue(
-      WorkspaceTransformer transformer, List metacardJsonData) {
-
-    ((List<Object>) metacardJsonData)
-        .stream()
-        .filter(Map.class::isInstance)
-        .map(Map.class::cast)
-        .forEach(this::removeExternalListAttributes);
-
-    return super.jsonValueToMetacardValue(transformer, metacardJsonData);
   }
 
   private void removeExternalListAttributes(Map listMetacardMap) {
@@ -116,15 +112,5 @@ public class EmbeddedListMetacardsHandler extends EmbeddedMetacardsHandler {
               return actionMap;
             })
         .collect(toList());
-  }
-
-  @Override
-  public String getKey() {
-    return WorkspaceConstants.WORKSPACE_LISTS;
-  }
-
-  @Override
-  public MetacardType getMetacardType() {
-    return ListMetacardImpl.TYPE;
   }
 }

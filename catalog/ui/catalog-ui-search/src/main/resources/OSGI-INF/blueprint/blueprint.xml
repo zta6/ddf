@@ -270,7 +270,9 @@
     </bean>
 
     <bean id="queryIdsParser"
-          class="org.codice.ddf.catalog.ui.metacard.workspace.transformer.impl.QueryIdsParser"/>
+          class="org.codice.ddf.catalog.ui.metacard.workspace.transformer.impl.AssociatedMetacardIdParser">
+        <argument value="queries"/>
+    </bean>
 
     <service ref="queryIdsParser"
              interface="org.codice.ddf.catalog.ui.metacard.workspace.transformer.WorkspaceTransformation"/>
@@ -300,8 +302,7 @@
              interface="org.codice.ddf.catalog.ui.metacard.workspace.transformer.WorkspaceTransformation"/>
 
     <bean id="listMetacardsTransformation"
-          class="org.codice.ddf.catalog.ui.metacard.workspace.transformer.impl.EmbeddedListMetacardsHandler">
-        <argument ref="metacardActionRegistry"/>
+          class="org.codice.ddf.catalog.ui.metacard.workspace.transformer.impl.ListIdsParser">
     </bean>
 
     <service ref="listMetacardsTransformation"
@@ -403,6 +404,11 @@
         <argument ref="catalogFramework"/>
     </bean>
 
+    <bean id="listMetacardsHandler"
+          class="org.codice.ddf.catalog.ui.metacard.workspace.transformer.impl.AssociatedListMetacardsHandler">
+        <argument ref="catalogFramework"/>
+    </bean>
+
     <bean id="metacardApplication" class="org.codice.ddf.catalog.ui.metacard.MetacardApplication">
         <argument ref="catalogFramework"/>
         <argument ref="filterBuilder"/>
@@ -423,6 +429,7 @@
         <argument ref="accessControlSecurityConfiguration"/>
         <argument ref="queryWorkspaceService"/>
         <argument ref="queryMetacardsHandler"/>
+        <argument ref="listMetacardsHandler"/>
     </bean>
 
     <reference id="coordinateSystemTranslator" interface="org.codice.usng4j.CoordinateSystemTranslator"
@@ -465,6 +472,10 @@
         <argument>
             <bean class="org.codice.ddf.catalog.ui.metacard.impl.SplitterLocatorImpl"/>
         </argument>
+        <argument ref="workspaceService"/>
+        <argument ref="workspaceService"/>
+        <argument ref="endpointUtil"/>
+        <argument ref="workspaceTransformer"/>
         <argument ref="catalogService"/>
     </bean>
 

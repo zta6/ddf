@@ -14,6 +14,7 @@
 package org.codice.ddf.catalog.ui.query.monitor.impl;
 
 import static org.apache.commons.lang3.Validate.notNull;
+import static org.codice.ddf.catalog.ui.metacard.workspace.ListMetacardTypeImpl.LIST_TAG;
 import static org.codice.ddf.catalog.ui.metacard.workspace.QueryMetacardTypeImpl.QUERY_TAG;
 import static org.codice.ddf.catalog.ui.metacard.workspace.WorkspaceConstants.WORKSPACE_TAG;
 
@@ -47,6 +48,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import javax.ws.rs.NotFoundException;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
+import org.codice.ddf.catalog.ui.metacard.workspace.ListMetacardImpl;
 import org.codice.ddf.catalog.ui.metacard.workspace.QueryMetacardImpl;
 import org.codice.ddf.catalog.ui.metacard.workspace.WorkspaceConstants;
 import org.codice.ddf.catalog.ui.metacard.workspace.WorkspaceMetacardImpl;
@@ -144,7 +146,7 @@ public class WorkspaceServiceImpl implements WorkspaceService {
       return Collections.emptyList();
     }
 
-    Query query = new QueryImpl(getQueriesFilter(queryIds));
+    Query query = new QueryImpl(getFilterForTag(queryIds, QUERY_TAG));
     QueryRequest queryRequest = new QueryRequestImpl(query);
 
     return ResultIterable.resultIterable(catalogFramework::query, queryRequest)
@@ -155,15 +157,36 @@ public class WorkspaceServiceImpl implements WorkspaceService {
         .collect(Collectors.toList());
   }
 
-  private Filter getQueriesFilter(List<String> queryIds) {
+  @Override
+  public List<ListMetacardImpl> getListMetacards(WorkspaceMetacardImpl workspaceMetacard) {
+    List<String> listIds = workspaceMetacard.getContent();
+
+    if (listIds.isEmpty()) {
+      LOGGER.trace(
+          "Workspace metacard with id [{}] does not contain any queries",
+          workspaceMetacard.getId());
+      return Collections.emptyList();
+    }
+
+    Query listQuery = new QueryImpl(getFilterForTag(listIds, LIST_TAG));
+    QueryRequest queryRequest = new QueryRequestImpl(listQuery);
+
+    return ResultIterable.resultIterable(catalogFramework::query, queryRequest)
+        .stream()
+        .map(Result::getMetacard)
+        .filter(Objects::nonNull)
+        .map(ListMetacardImpl::new)
+        .collect(Collectors.toList());
+  }
+
+  private Filter getFilterForTag(List<String> ids, String tag) {
     List<Filter> queryFilters =
-        queryIds
-            .stream()
+        ids.stream()
             .map(id -> filterBuilder.attribute(Core.ID).is().text(id))
             .collect(Collectors.toList());
 
     return filterBuilder.allOf(
-        filterBuilder.attribute(Core.METACARD_TAGS).is().text(QUERY_TAG),
+        filterBuilder.attribute(Core.METACARD_TAGS).is().text(tag),
         filterBuilder.anyOf(queryFilters));
   }
 
@@ -341,5 +364,28 @@ public class WorkspaceServiceImpl implements WorkspaceService {
                 new NotFoundException(
                     String.format(
                         "Could not find workspace metacard that contains query id [%s]", queryId)));
+  }
+
+  @Override
+  public WorkspaceMetacardImpl getWorkspaceFromListId(String listId) {
+    Filter listFilter =
+        filterBuilder.allOf(
+            filterBuilder.attribute(Core.METACARD_TAGS).like().text(WORKSPACE_TAG),
+            filterBuilder.attribute(WorkspaceConstants.WORKSPACE_LISTS).like().text(listId));
+
+    Query listQuery = new QueryImpl(listFilter);
+    QueryRequest queryRequest = new QueryRequestImpl(listQuery);
+
+    return ResultIterable.resultIterable(catalogFramework::query, queryRequest)
+        .stream()
+        .map(Result::getMetacard)
+        .filter(Objects::nonNull)
+        .map(WorkspaceMetacardImpl::new)
+        .findFirst()
+        .orElseThrow(
+            () ->
+                new NotFoundException(
+                    String.format(
+                        "Could not find workspace metacard that contains list id [%s]", listId)));
   }
 }

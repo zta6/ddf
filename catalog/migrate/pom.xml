@@ -29,6 +29,7 @@
     <module>migration-api</module>
     <module>migration-command</module>
     <module>workspace-query-separation</module>
+    <module>target-list-migration</module>
   </modules>
 
 </project>
